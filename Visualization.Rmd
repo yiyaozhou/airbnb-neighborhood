@@ -1,0 +1,86 @@
+---
+title: "Visualization"
+author: "Yiyao Zhou"
+date: "11/15/2018"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(ggmap)
+library(dplyr)
+library(qdap) 
+library(tm) 
+
+qdap_clean <- function(text){
+text <- bracketX(text)
+text <- replace_abbreviation(text) 
+text <- replace_contraction(text)
+text <- replace_symbol(text)
+return(text) }
+ 
+tm_clean <- function(corpus){
+corpus <- tm_map(corpus, stripWhitespace)
+corpus <- tm_map(corpus, removeNumbers)
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, content_transformer(tolower))
+corpus <- tm_map(corpus, stemDocument, language = "english")
+corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "percent", "can", "will","ok","okay","let"))
+return(corpus) }
+
+tokenizer2 <- function(x)
+NGramTokenizer(x, Weka_control(min = 2, max = 2))
+tokenizer3 <- function(x)
+NGramTokenizer(x, Weka_control(min = 3, max = 3))
+
+pal=brewer.pal(9,"Blues")
+pal=pal[-(1:4)] 
+```
+
+1. Processed more than 6,000 Boston area listings on Airbnb and plotted them by neighborhood using a choropleth map with Tableau; explored the relationship between neighborhood and price/room type
+2. Merged Airbnb listing data with external neighborhood demographics and crime rate data from Boston government website (Analyze Boston)
+3. Based on the location description of each listing, used text mining techniques to create word clouds for 23 neighborhoods separately and identified the most frequent words for each neighborhood
+
+
+```{r}
+setwd("~/Desktop/ML project/Boston Airbnb Neighborhood/airbnb-neighborhood")
+listing <- read.csv("listings.csv")
+summary(listing)
+
+
+nb <- listing[c("id", "name", "summary", "space", "description", "neighborhood_overview", "transit",
+                "host_id", "host_neighbourhood", "neighbourhood_cleansed", "zipcode", "latitude", "longitude",
+                "property_type", "room_type", "price", "review_scores_location")]
+ggplot(nb, aes(x = longitude, y = latitude, color = neighbourhood)) + geom_point(size = 0.5, alpha = 0.5) 
+
+lon <- mean(listing$longitude)
+lat <- mean(listing$latitude)
+
+# The get_map() function does not work all the time, so we decide to #comment the code and attach a map from when it run successfully
+# map <- get_map(location = c(lon, lat), zoom = 12)
+# ggmap(map) + geom_point(aes(x = longitude, y = latitude, color = Commercial), data = airbnb, size = 0.3, alpha = 0.5)
+
+```
+# Generate subset for each neighborhood
+```{r}
+neighborhood_overview <- nb$neighborhood_overview
+mylist <- split(nb, nb$neighbourhood_cleansed)
+for (i in 1:1){
+  temp <- data.frame(mylist[i])[6]
+  temp <- na.omit(temp)
+  temp <- as.character(temp)
+  # cleaning
+	nb_qd_cl <- qdap_clean(temp)
+	nb_corp <- VCorpus(VectorSource(nb_qd_cl)) 
+  cl_nb_corp <- tm_clean(nb_corp)
+	# Create tfidf_tdm
+	tfidf_tdm <- TermDocumentMatrix(cl_nb_corp)
+	# Create tfidf_tdm_m
+	tfidf_tdm_m <- as.matrix(tfidf_tdm) 
+	term_frequency <- rowSums(tfidf_tdm_m)
+	# Sort term_frequency in descending order
+	term_frequency <- sort(term_frequency, decreasing = TRUE)
+	freq.df.term = data.frame(word=names(term_frequency), freq=term_frequency)
+	
+}
+```
