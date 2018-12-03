@@ -1,0 +1,123 @@
+---
+title: "Basic mapping with ggplot2 and ggmap"
+author: "Yiyao Zhou"
+date: "12/2/2018"
+output: html_document
+---
+
+```{r}
+library(ggmap)
+register_google(key = "***")
+setwd("~/Github/airbnb-neighborhood")
+```
+
+```{r}
+# Grabbing a background map
+corvallis <- c(lon = -123.2620, lat = 44.5646)
+# Get map at zoom level 5: map_5
+map_5 <- get_map(corvallis, zoom = 5, scale = 1)
+# Plot map at zoom level 5
+ggmap(map_5)
+# Get map at zoom level 13: corvallis_map
+corvallis_map <- get_map(corvallis, zoom = 13, scale = 1)
+# Plot map at zoom level 13
+ggmap(corvallis_map)
+
+# Putting it all together
+sales <- readRDS("~/Github/airbnb-neighborhood/01_corv_sales.rds")
+# Look at head() of sales
+head(sales)
+# Swap out call to ggplot() with call to ggmap()
+ggmap(corvallis_map) +
+  geom_point(aes(lon, lat), data = sales)
+# Map color to year_built
+ggmap(corvallis_map) +
+  geom_point(aes(lon, lat, color = year_built), data = sales)
+# Map size to bedrooms
+ggmap(corvallis_map) +
+  geom_point(aes(lon, lat, size = bedrooms), data = sales )
+# Map color to price / finished_squarefeet
+ggmap(corvallis_map) +
+  geom_point(aes(lon, lat, color = price / finished_squarefeet), data = sales)
+# Add a maptype argument to get a satellite map
+corvallis_map_sat <- get_map(corvallis, zoom = 13, maptype = 'satellite')
+# Edit to display satellite map
+ggmap(corvallis_map_sat) +
+  geom_point(aes(lon, lat, color = year_built), data = sales)
+# Add source and maptype to get toner map from Stamen Maps
+corvallis_map_bw <- get_map(corvallis, zoom = 13, maptype = 'watercolor', source = 'stamen')
+# corvallis_map_bw <- get_map(corvallis, zoom = 13, maptype = 'toner', source = 'stamen')
+# Edit to display toner map
+ggmap(corvallis_map_bw) +
+  geom_point(aes(lon, lat, color = year_built), data = sales)
+
+# Use base_layer argument to ggmap() to specify data and x, y mappings
+ggmap(corvallis_map_bw, base_layer = ggplot(sales, aes(lon, lat))) +
+  geom_point(aes(color = year_built))
+# Use base_layer argument to ggmap() and add facet_wrap()
+ggmap(corvallis_map_bw, base_layer = ggplot(sales, aes(lon, lat))) +
+  geom_point(aes(color = year_built)) +
+  facet_wrap(~ class)
+# Plot house sales using qmplot()
+qmplot(lon, lat, data = sales, 
+       geom = "point", color = bedrooms) +
+  facet_wrap(~ month)
+
+```
+Adding a map to your plot of sales explains some of the structure in the data: there are no house sales East of the Willamette River or on the Oregon State University campus. This structure is really just a consequence of where houses are in Corvallis; you can't have a house sale where there are no houses!
+
+You've seen you can add layers to a ggmap() plot by adding geom_***() layers and specifying the data and mapping explicitly, but this approach has two big downsides: further layers also need to specify the data and mappings, and facetting won't work at all.
+
+Luckily ggmap() provides a way around these downsides: the base_layer argument. You can pass base_layer a normal ggplot() call that specifies the default data and mappings for all layers.
+
+
+```{r}
+ward_sales <- readRDS("~/Github/airbnb-neighborhood/01_corv_wards.rds")
+# Add a point layer with color mapped to ward
+ggplot(ward_sales, aes(lon, lat)) +
+  geom_point(aes(color = ward))
+# Add a point layer with color mapped to group
+ggplot(ward_sales, aes(lon, lat)) +
+  geom_point(aes(color = group))
+# Add a path layer with group mapped to group
+ggplot(ward_sales, aes(lon, lat)) +
+  geom_path(aes(group = group))
+# Add a polygon layer with fill mapped to ward, and group to group
+ggplot(ward_sales, aes(lon, lat)) +
+  geom_polygon(aes(fill = ward, group = group))
+
+# Get your polygons on a map
+# Fix the polygon cropping
+ggmap(corvallis_map_bw, 
+      base_layer = ggplot(ward_sales, aes(lon, lat)), extent = "normal", maprange = FALSE) +
+  geom_polygon(aes(group = group, fill = ward))
+# Repeat, but map fill to num_sales
+ggmap(corvallis_map_bw, 
+      base_layer = ggplot(ward_sales, aes(lon, lat)), extent = "normal", maprange = FALSE) +
+  geom_polygon(aes(group = group, fill = num_sales))
+# Repeat again, but map fill to avg_price
+ggmap(corvallis_map_bw, 
+      base_layer = ggplot(ward_sales, aes(lon, lat)), extent = "normal", maprange = FALSE) +
+  geom_polygon(aes(group = group, fill = avg_price), alpha = 0.8)
+# Alternative
+qmplot(lon, lat, data = ward_sales, geom = "polygon", group = group, fill = avg_price)
+
+
+```
+```{r}
+# Raster data as a heatmap
+preds <- readRDS("~/Github/airbnb-neighborhood/01_corv_predicted_grid.rds")
+
+# Add a geom_point() layer
+ggplot(preds, aes(lon, lat)) +
+  geom_point()
+# Add a tile layer with fill mapped to predicted_price
+ggplot(preds, aes(lon, lat)) +
+  geom_tile(aes(fill = predicted_price))
+# Use ggmap() instead of ggplot()
+ggmap(corvallis_map_bw) +
+  geom_tile(aes(lon, lat, fill = predicted_price), data = preds, alpha = 0.8)
+```
+The predicted house prices in preds are called raster data: you have a variable measured (or in this case predicted) at every location in a regular grid.
+
+Looking at head(preds) in the console, you can see the lat values stepping up in intervals of about 0.002, as lon is constant. After 40 rows, lon increases by about 0.003, as lat runs through the same values. For each lat/lon location, you also have a predicted_price. You'll see later in Chapter 3, that a more useful way to think about (and store) this kind of data is in a matrix.
